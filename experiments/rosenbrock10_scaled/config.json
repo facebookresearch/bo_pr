@@ -1,0 +1,7 @@
+{
+  "iterations": 100,
+  "function_name": "rosenbrock10_scaled",
+  "batch_size": 1,
+  "mc_samples": 256,
+  "optimization_kwargs": {}
+}

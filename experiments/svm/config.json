@@ -1,0 +1,8 @@
+{
+  "iterations": 200,
+  "dim": 53,
+  "function_name": "svm",
+  "batch_size": 1,
+  "mc_samples": 256,
+  "optimization_kwargs": {}
+}

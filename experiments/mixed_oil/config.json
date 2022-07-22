@@ -1,0 +1,8 @@
+{
+  "iterations": 200,
+  "dim": 7,
+  "function_name": "mixed_oil",
+  "batch_size": 1,
+  "mc_samples": 256,
+  "optimization_kwargs": {}
+}

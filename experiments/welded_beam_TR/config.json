@@ -1,0 +1,14 @@
+{
+  "iterations": 200,
+  "function_name": "welded_beam",
+  "batch_size": 1,
+  "mc_samples": 256,
+  "optimization_kwargs": {},
+  "model_kwargs": {
+    "kernel_type": "mixed_categorical"
+  },
+  "problem_kwargs": {
+    "continuous": false
+  },
+  "use_trust_region": true
+}

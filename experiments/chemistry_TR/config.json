@@ -1,0 +1,12 @@
+{
+  "iterations": 200,
+  "function_name": "chemistry",
+  "batch_size": 1,
+  "mc_samples": 256,
+  "optimization_kwargs": {},
+  "model_kwargs": {
+    "kernel_type": "mixed_categorical"
+  },
+  "acqf_kwargs": {},
+  "use_trust_region": true
+}

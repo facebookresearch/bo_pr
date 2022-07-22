@@ -1,0 +1,8 @@
+{
+  "iterations": 100,
+  "n_initial_points": 20,
+  "function_name": "mixed_int_f1",
+  "batch_size": 1,
+  "mc_samples": 256,
+  "optimization_kwargs": {}
+}

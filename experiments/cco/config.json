@@ -1,0 +1,11 @@
+{
+  "iterations": 400,
+  "n_initial_points": 20,
+  "function_name": "cco",
+  "batch_size": 1,
+  "mc_samples": 256,
+  "optimization_kwargs": {},
+  "problem_kwargs": {
+    "scalarize": true
+  }
+}

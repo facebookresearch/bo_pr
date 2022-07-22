@@ -1,0 +1,10 @@
+{
+  "iterations": 100,
+  "function_name": "ackley13",
+  "batch_size": 1,
+  "mc_samples": 256,
+  "optimization_kwargs": {},
+  "acqf_kwargs": {
+    "pr_use_analytic": true
+  }
+}
