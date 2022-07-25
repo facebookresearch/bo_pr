@@ -13,7 +13,6 @@ requirements = [
     "scipy",
     "jupyter",
     "matplotlib",
-    "networkx",
     "sklearn",
     "statsmodels",
     "xgboost",
