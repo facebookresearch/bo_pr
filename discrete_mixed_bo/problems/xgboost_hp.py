@@ -157,7 +157,7 @@ class XGBoostHyperparameter(DiscreteTestProblem):
                         int(val)
                     ]
             elif args[i] == "learning_rate":
-                kwargs[args[i]] = float(10 ** val)
+                kwargs[args[i]] = float(10**val)
             elif args[i] in ("subsample", "reg_lambda", "reg_alpha"):
                 kwargs[args[i]] = float(val)
             elif args[i] in ["max_depth", "min_child_weight", "n_estimators"]:

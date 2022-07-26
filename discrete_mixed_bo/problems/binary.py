@@ -149,5 +149,5 @@ class LABS(DiscreteTestProblem):
             C_k = 0
             for j in range(0, N - k - 1):
                 C_k += (-1) ** (1 - x[j] * x[j + k])
-            E += C_k ** 2
+            E += C_k**2
         return -1.0 * N / (2 * E)

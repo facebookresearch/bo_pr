@@ -15,12 +15,14 @@ from discrete_mixed_bo.experiment_utils import (
     eval_problem,
     generate_initial_data,
     initialize_model,
+    generate_discrete_options,
     get_acqf,
     get_exact_rounding_func,
     get_problem,
 )
 from discrete_mixed_bo.model_utils import apply_normal_copula_transform
 from discrete_mixed_bo.optimize import optimize_acqf
+from botorch.optim.optimize import optimize_acqf_discrete, optimize_acqf_mixed
 import numpy as np
 from botorch.test_functions.base import (
     ConstrainedBaseTestProblem,
@@ -42,22 +44,27 @@ supported_labels = [
     "pr__ei",
     "exact_round__fin_diff__ei",
     "exact_round__ste__ei",
+    "enumerate__ei",
     "cont_optim__round_after__ts",
     "pr__ts",
     "exact_round__fin_diff__ts",
     "exact_round__ste__ts",
+    "enumerate__ts",
     "cont_optim__round_after__ucb",
     "pr__ucb",
     "exact_round__fin_diff__ucb",
     "exact_round__ste__ucb",
+    "enumerate__ucb",
     "cont_optim__round_after__ehvi",
     "pr__ehvi",
     "exact_round__fin_diff__ehvi",
     "exact_round__ste__ehvi",
+    "enumerate__ehvi",
     "cont_optim__round_after__nehvi-1",
     "pr__nehvi-1",
     "exact_round__fin_diff__nehvi-1",
     "exact_round__ste__nehvi-1",
+    "enumerate__nehvi-1",
 ]
 
 
@@ -311,21 +318,51 @@ def run_one_replication(
 
             # Optimize the acqf.
             torch.cuda.empty_cache()
-            raw_candidates, _ = optimize_acqf(
-                acq_function=acq_func,
-                bounds=bounds,
-                q=batch_size,
-                **optimization_kwargs,
-                # return candidates for all random restarts
-                return_best_only=False,
-            )
-            # round candidates
-            candidates = exact_rounding_func(raw_candidates)
-            # compute acquisition values of rounded candidates
-            # and select best across restarts
-            with torch.no_grad():
-                best_idx = acq_func(candidates).argmax().item()
-            candidates = candidates[best_idx]
+            if "enumerate" in label:
+                # enumerate the discrete options and optimize the continuous
+                # parameters for each discrete option, if there are any
+
+                # construct a list of dictionaries mapping indices in one-hot space
+                # to parameter values.
+                discrete_options = generate_discrete_options(
+                    base_function=base_function,
+                )
+                if base_function.cont_indices.shape[0] > 1:
+                    # optimize mixed
+                    candidates, _ = optimize_acqf_mixed(
+                        acq_function=acq_func,
+                        bounds=bounds,
+                        q=batch_size,
+                        fixed_features_list=discrete_options,
+                        **optimization_kwargs,
+                    )
+                else:
+                    # optimize discrete
+                    candidates, _ = optimize_acqf_discrete(
+                        acq_function=acq_func,
+                        q=batch_size,
+                        choices=discrete_options,
+                        **optimization_kwargs,
+                    )
+            else:
+                raw_candidates, _ = optimize_acqf(
+                    acq_function=acq_func,
+                    bounds=bounds,
+                    q=batch_size,
+                    **optimization_kwargs,
+                    # return candidates for all random restarts
+                    return_best_only=False,
+                )
+                # round candidates
+                candidates = exact_rounding_func(raw_candidates)
+                # compute acquisition values of rounded candidates
+                # and select best across restarts
+                with torch.no_grad():
+                    # TODO: support batches here
+                    if batch_size > 1:
+                        raise NotImplementedError
+                    best_idx = acq_func(candidates).argmax().item()
+                candidates = candidates[best_idx]
 
             torch.cuda.empty_cache()
             # free memory

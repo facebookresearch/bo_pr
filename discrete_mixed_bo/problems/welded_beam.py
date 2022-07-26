@@ -152,13 +152,13 @@ class WeldedBeam(DiscreteTestProblem, ConstrainedBaseTestProblem):
         cos_theta = params["cos_theta"]
         C1, C2, sigma_d, E, G = self.material_params[int(m.item())]
         sigma = 6 * self.F * self.L / (t.pow(2) * b)
-        delta = 4 * self.F * self.L ** 3 / (E * t.pow(3) * b)
+        delta = 4 * self.F * self.L**3 / (E * t.pow(3) * b)
         P_c = (
             4.013
             * t
             * b.pow(3)
             * sqrt(E * G)
-            / (6 * self.L ** 2)
+            / (6 * self.L**2)
             * (1 - t / (4 * self.L) * sqrt(E / G))
         )
         tau_prime = torch.sqrt(self.F / A)

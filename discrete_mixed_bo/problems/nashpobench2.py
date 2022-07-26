@@ -380,7 +380,7 @@ class NASHPOBenchII(DiscreteTestProblem):
         cellcode = f"{nas_code[0]}|{nas_code[1]}{nas_code[2]}|{nas_code[3]}{nas_code[4]}{nas_code[5]}"
         bs = int(2 ** (bs_code + 4))  # so 0 -> 16, 1 -> 32, ..., 5 -> 512
         lr = float(
-            0.003125 * (2 ** lr_code)
+            0.003125 * (2**lr_code)
         )  # so 0 -> 0.003125, 1 -> 0.00625, ..., 7 -> 0.4
         return cellcode, bs, lr
 

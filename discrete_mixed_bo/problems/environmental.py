@@ -17,7 +17,7 @@ from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 def c(s, t, M, D, L, tau) -> float:
-    val = (M * np.exp(-(s ** 2) / 4 * D * t)) / np.sqrt(4 * np.pi * D * t)
+    val = (M * np.exp(-(s**2) / 4 * D * t)) / np.sqrt(4 * np.pi * D * t)
     if t > tau:
         val += (
             (t > tau) * M * np.exp(-((s - L) ** 2) / (4 * D * (t - tau)))

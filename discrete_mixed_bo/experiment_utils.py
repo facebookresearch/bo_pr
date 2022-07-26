@@ -29,6 +29,8 @@ from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikeliho
 from botorch.utils.sampling import (
     draw_sobol_samples,
 )
+from torch.nn.functional import one_hot
+from itertools import product
 from copy import deepcopy
 from scipy.stats.mstats import winsorize as scipy_winsorize
 from math import log
@@ -433,7 +435,7 @@ def get_acqf(
         posterior_transform = None
     if label[-3:] == "ucb":
         beta = 0.2 * X_baseline.shape[-1] * log(2 * iteration)
-    if "exact_round" in label:
+    if ("exact_round" in label) or ("enumerate" in label):
         if isinstance(model, ModelListGP):
             models = model.models
             for m in model.models:
@@ -451,12 +453,7 @@ def get_acqf(
             else:
                 model.input_transform = exact_rounding_func
     if batch_size == 1:
-        if label in (
-            "exact_round__fin_diff__ei",
-            "exact_round__ste__ei",
-            "cont_optim__round_after__ei",
-            "pr__ei",
-        ):
+        if label[-2:] == "ei":
             acq_func = get_EI(
                 model=model,
                 train_Y=train_Y,
@@ -464,12 +461,7 @@ def get_acqf(
                 posterior_transform=posterior_transform,
             )
 
-        elif label in (
-            "exact_round__fin_diff__ucb",
-            "exact_round__ste__ucb",
-            "cont_optim__round_after__ucb",
-            "pr__ucb",
-        ):
+        elif label[-3:] == "ucb":
             acq_func = UpperConfidenceBound(
                 model=model,
                 beta=beta,
@@ -482,36 +474,20 @@ def get_acqf(
                 n_samples=1,
                 num_rff_features=kwargs.get("num_rff_features", 512),
             )
-            if label in (
-                "exact_round__fin_diff__ts",
-                "exact_round__ste__ts",
-                "cont_optim__round_after__ts",
-                "pr__ts",
-            ):
+            if label[-2:] == "ts":
                 acq_func = PosteriorMean(
                     model=model,
                     posterior_transform=posterior_transform,
                 )
-            if "nehvi-1" == label[-7:]:
+            if label[-7:] == "nehvi-1":
                 with torch.no_grad():
                     preds = model.posterior(X_baseline).mean
-                if label in (
-                    "cont_optim__round_after__nehvi-1",
-                    "exact_round__fin_diff__nehvi-1",
-                    "exact_round__ste__nehvi-1",
-                    "pr__nehvi-1",
-                ):
-                    acq_func = get_qEHVI(
-                        model=model,
-                        train_Y=preds,
-                        ref_point=base_function.ref_point,
-                    )
-        elif label in (
-            "cont_optim__round_after__ehvi",
-            "exact_round__fin_diff__ehvi",
-            "exact_round__ste__ehvi",
-            "pr__ehvi",
-        ):
+                acq_func = get_qEHVI(
+                    model=model,
+                    train_Y=preds,
+                    ref_point=base_function.ref_point,
+                )
+        elif label[-4:] == "ehvi":
             acq_func = get_EHVI(
                 model=model,
                 train_Y=train_Y,
@@ -737,3 +713,55 @@ def get_problem(name: str, dim: Optional[int] = None, **kwargs) -> DiscreteTestP
         )
     else:
         raise ValueError(f"Unknown function name: {name}!")
+
+
+def generate_discrete_options(
+    base_function: DiscreteTestProblem,
+) -> List[Dict[int, float]]:
+    categorical_features = base_function.categorical_features
+    discrete_indices = torch.cat(
+        [base_function.integer_indices, base_function.categorical_indices], dim=0
+    )
+    cardinalities = (
+        (
+            base_function.bounds[1, discrete_indices]
+            - base_function.bounds[0, discrete_indices]
+            + 1
+        )
+        .long()
+        .tolist()
+    )
+    discrete_indices_list = discrete_indices.tolist()
+    discrete_options = torch.tensor(
+        list(product(*[range(c) for c in cardinalities])),
+        dtype=torch.long,
+    )
+    indices = base_function.integer_indices.tolist()
+    # now one-hot encode the categoricals
+    if categorical_features is not None:
+        one_hot_categoricals = [
+            one_hot(discrete_options[:, i], num_classes=cardinalities[i])
+            for i in range(
+                base_function.integer_indices.shape[0], discrete_options.shape[1]
+            )
+        ]
+        discrete_options = torch.cat(
+            [
+                discrete_options[:, : base_function.integer_indices.shape[0]],
+                *one_hot_categoricals,
+            ],
+            dim=-1,
+        )
+
+        # get a list of the starting and ending indices of each categorical feature in one-hot space
+        start_idx = None
+        for i in sorted(categorical_features.keys()):
+            if start_idx is None:
+                start_idx = i
+            end_idx = start_idx + categorical_features[i]
+            categ_indices = list(range(start_idx, end_idx))
+            indices.extend(categ_indices)
+            start_idx = end_idx
+    # create a list of dictionaries of mapping indices to values
+    # the list has a dictionary for each discrete configuration
+    return [dict(zip(xi, indices)) for xi in discrete_options.tolist()]
