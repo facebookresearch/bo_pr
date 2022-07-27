@@ -745,7 +745,7 @@ def generate_discrete_options(
                 base_function.integer_indices.shape[0], discrete_options.shape[1]
             )
         ]
-        discrete_options2 = torch.cat(
+        discrete_options = torch.cat(
             [
                 discrete_options[:, : base_function.integer_indices.shape[0]],
                 *one_hot_categoricals,

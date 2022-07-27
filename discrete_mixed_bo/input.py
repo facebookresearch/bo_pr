@@ -56,6 +56,7 @@ class OneHotToNumeric(InputTransform, Module):
                 start_idx = end_idx
         self.numeric_dim = min(self.categorical_starts) + len(categorical_features)
         self.use_ste = use_ste
+        self.categorical_features = categorical_features
 
     def transform(self, X: Tensor) -> Tensor:
         r"""Round the inputs.
@@ -75,6 +76,35 @@ class OneHotToNumeric(InputTransform, Module):
                 X_numeric[..., idx] = X[..., start:end].argmax(dim=-1)
             idx += 1
         return X_numeric
+
+    def untransform(self, X: Tensor) -> Tensor:
+        r"""Un-transform the inputs to a model.
+
+        Un-transforms of the individual transforms are applied in reverse sequence.
+
+        Args:
+            X: A `batch_shape x n x d`-dim tensor of transformed inputs.
+
+        Returns:
+            A `batch_shape x n x d`-dim tensor of un-transformed inputs.
+        """
+        if X.requires_grad:
+            raise NotImplementedError
+        if self.categorical_features is not None:
+            one_hot_categoricals = [
+                one_hot(X[..., idx].long(), num_classes=cardinality)
+                for idx, cardinality in sorted(
+                    self.categorical_features.items(), key=lambda x: x[0]
+                )
+            ]
+            X = torch.cat(
+                [
+                    X[..., : min(self.categorical_features.keys())],
+                    *one_hot_categoricals,
+                ],
+                dim=-1,
+            )
+        return X
 
 
 class Round(InputTransform, Module):

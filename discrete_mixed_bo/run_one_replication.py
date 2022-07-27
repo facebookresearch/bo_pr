@@ -7,6 +7,7 @@
 r"""
 Run one replication.
 """
+import nevergrad as ng
 from time import time
 import torch
 from torch import Tensor
@@ -20,6 +21,7 @@ from discrete_mixed_bo.experiment_utils import (
     get_exact_rounding_func,
     get_problem,
 )
+from discrete_mixed_bo.input import OneHotToNumeric
 from discrete_mixed_bo.model_utils import apply_normal_copula_transform
 from discrete_mixed_bo.optimize import optimize_acqf
 from botorch.optim.optimize import optimize_acqf_discrete, optimize_acqf_mixed
@@ -65,6 +67,7 @@ supported_labels = [
     "exact_round__fin_diff__nehvi-1",
     "exact_round__ste__nehvi-1",
     "enumerate__nehvi-1",
+    "nevergrad_porfolio",
 ]
 
 
@@ -225,6 +228,61 @@ def run_one_replication(
             is_constrained=is_constrained,
         )
 
+    # setup nevergrad_porfolio
+    if label == "nevergrad_porfolio":
+        params = []
+        for i in base_function.cont_indices:
+            params.append(
+                ng.p.Scalar(
+                    lower=base_function.bounds[0, i].item(),
+                    upper=base_function.bounds[1, i].item(),
+                )
+            )
+        for i in base_function.integer_indices:
+            params.append(
+                ng.p.TransitionChoice(
+                    list(
+                        range(
+                            int(base_function.bounds[0, i].item()),
+                            int(base_function.bounds[1, i].item()) + 1,
+                        )
+                    )
+                )
+            )
+        for i in base_function.categorical_indices:
+            params.append(
+                ng.p.Choice(
+                    list(
+                        range(
+                            int(base_function.bounds[0, i].item()),
+                            int(base_function.bounds[1, i].item()) + 1,
+                        )
+                    )
+                )
+            )
+        optimizer = ng.optimizers.PortfolioDiscreteOnePlusOne(
+            parametrization=ng.p.Instrumentation(*params),
+            budget=iterations + X.shape[0],
+            num_workers=1,
+        )
+        ohe_to_numeric = OneHotToNumeric(
+            categorical_features=base_function.categorical_features,
+            transform_on_train=True,
+        )
+        X_numeric = ohe_to_numeric(X)
+        if len(base_function.categorical_features) > 0:
+            X_numeric[..., base_function.categorical_indices] = normalize(
+                X_numeric[..., base_function.categorical_indices],
+                base_function.categorical_bounds,
+            )
+        X_numeric = unnormalize(X_numeric, base_function.bounds)
+        for xi, yi in zip(X_numeric.cpu().numpy(), Y.cpu().numpy()):
+            print(tuple(xi.tolist()))
+            xi = optimizer.parametrization.spawn_child(
+                new_value=(tuple(xi.tolist()), {})
+            )
+            optimizer.tell(xi, yi.item())
+
     # BO loop for as many iterations as needed.
     for i in range(existing_iterations, iterations):
         print(
@@ -252,6 +310,28 @@ def run_one_replication(
                 .to(**tkwargs)
             )
             candidates = init_exact_rounding_func(raw_candidates)
+        elif label == "nevergrad_porfolio":
+            X_numeric = ohe_to_numeric(X[-1:])
+            if len(base_function.categorical_features) > 0:
+                X_numeric[..., base_function.categorical_indices] = normalize(
+                    X_numeric[..., base_function.categorical_indices],
+                    base_function.categorical_bounds,
+                )
+            X_numeric = unnormalize(X_numeric, base_function.bounds)
+            xi = optimizer.parametrization.spawn_child(
+                new_value=(tuple(X_numeric.view(-1).tolist()), {})
+            )
+            optimizer.tell(xi, Y[-1].item())
+            candidates_numeric = torch.tensor(
+                optimizer.ask().value[0], dtype=X.dtype, device=X.device
+            ).view(1, -1)
+            candidates = normalize(candidates_numeric, base_function.bounds)
+            if len(base_function.categorical_features) > 0:
+                candidates[..., base_function.categorical_indices] = unnormalize(
+                    candidates[..., base_function.categorical_indices],
+                    base_function.categorical_bounds,
+                )
+            candidates = ohe_to_numeric.untransform(candidates)
         else:
             # Construct the acqf.
             acqf_exact_rounding_func = get_exact_rounding_func(
