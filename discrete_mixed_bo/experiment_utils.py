@@ -736,6 +736,10 @@ def generate_discrete_options(
         list(product(*[range(c) for c in cardinalities])),
         dtype=torch.long,
     )
+
+    import pdb
+
+    pdb.set_trace()
     indices = base_function.integer_indices.tolist()
     # now one-hot encode the categoricals
     if categorical_features is not None:
@@ -745,7 +749,7 @@ def generate_discrete_options(
                 base_function.integer_indices.shape[0], discrete_options.shape[1]
             )
         ]
-        discrete_options = torch.cat(
+        discrete_options2 = torch.cat(
             [
                 discrete_options[:, : base_function.integer_indices.shape[0]],
                 *one_hot_categoricals,
@@ -764,4 +768,4 @@ def generate_discrete_options(
             start_idx = end_idx
     # create a list of dictionaries of mapping indices to values
     # the list has a dictionary for each discrete configuration
-    return [dict(zip(xi, indices)) for xi in discrete_options.tolist()]
+    return [dict(zip(indices, xi)) for xi in discrete_options.tolist()]

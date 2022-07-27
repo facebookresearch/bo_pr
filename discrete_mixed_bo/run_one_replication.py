@@ -327,7 +327,7 @@ def run_one_replication(
                 discrete_options = generate_discrete_options(
                     base_function=base_function,
                 )
-                if base_function.cont_indices.shape[0] > 1:
+                if base_function.cont_indices.shape[0] > 0:
                     # optimize mixed
                     candidates, _ = optimize_acqf_mixed(
                         acq_function=acq_func,
