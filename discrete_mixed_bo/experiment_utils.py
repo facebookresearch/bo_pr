@@ -736,10 +736,6 @@ def generate_discrete_options(
         list(product(*[range(c) for c in cardinalities])),
         dtype=torch.long,
     )
-
-    import pdb
-
-    pdb.set_trace()
     indices = base_function.integer_indices.tolist()
     # now one-hot encode the categoricals
     if categorical_features is not None:
