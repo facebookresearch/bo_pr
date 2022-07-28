@@ -44,7 +44,9 @@ class OneHotToNumeric(InputTransform, Module):
         self.transform_on_fantasize = transform_on_fantasize
         self.categorical_starts = []
         self.categorical_ends = []
-        if categorical_features is not None:
+        self.categorical_features = None if ((categorical_features is None) or (len(categorical_features) > 0)) else categorical_features
+
+        if self.categorical_features is not None:
             start_idx = None
             for i in sorted(categorical_features.keys()):
                 if start_idx is None:
@@ -56,7 +58,6 @@ class OneHotToNumeric(InputTransform, Module):
                 start_idx = end_idx
             self.numeric_dim = min(self.categorical_starts) + len(categorical_features)
         self.use_ste = use_ste
-        self.categorical_features = categorical_features
 
     def transform(self, X: Tensor) -> Tensor:
         r"""Round the inputs.
