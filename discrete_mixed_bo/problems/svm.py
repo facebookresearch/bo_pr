@@ -85,13 +85,17 @@ class SVMFeatureSelection(DiscreteTestProblem):
             (x[: self.n_features] == 0) | (x[: self.n_features] == 1)
         ).all()  # Features must be 0 or 1
         inds_selected = np.where(x[: self.n_features] == 1)[0]
-        epsilon = 0.01 * 10 ** (2 * x[-3])  # Default = 0.1
-        C = 0.01 * 10 ** (4 * x[-2])  # Default = 1.0
-        gamma = (
-            (1 / self.n_features) * 0.1 * 10 ** (2 * x[-1])
-        )  # Default = 1.0 / self.n_features
-        model = SVR(C=C, epsilon=epsilon, gamma=gamma)
-        model.fit(self.train_x[:, inds_selected], self.train_y)
-        pred = model.predict(self.test_x[:, inds_selected])
+        if inds_selected.shape[0] == 0:
+            # if no features, use the mean prediction
+            pred = train_y.mean(axis=0)
+        else:
+            epsilon = 0.01 * 10 ** (2 * x[-3])  # Default = 0.1
+            C = 0.01 * 10 ** (4 * x[-2])  # Default = 1.0
+            gamma = (
+                (1 / self.n_features) * 0.1 * 10 ** (2 * x[-1])
+            )  # Default = 1.0 / self.n_features
+            model = SVR(C=C, epsilon=epsilon, gamma=gamma)
+            model.fit(self.train_x[:, inds_selected], self.train_y)
+            pred = model.predict(self.test_x[:, inds_selected])
         mse = ((pred - self.test_y) ** 2).mean(axis=0)
         return 1 * math.sqrt(mse)  # Return RMSE
