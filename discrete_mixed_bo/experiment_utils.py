@@ -749,7 +749,7 @@ def generate_discrete_options(
     # now one-hot encode the categoricals
     if categorical_features is not None:
         one_hot_categoricals = [
-            one_hot(discrete_options[:, i], num_classes=cardinalities[i])
+            one_hot(discrete_options[:, i].long(), num_classes=cardinalities[i])
             for i in range(
                 base_function.integer_indices.shape[0], discrete_options.shape[1]
             )
