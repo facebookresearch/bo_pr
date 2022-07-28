@@ -716,7 +716,8 @@ def get_problem(name: str, dim: Optional[int] = None, **kwargs) -> DiscreteTestP
 
 
 def generate_discrete_options(
-    base_function: DiscreteTestProblem, return_tensor: bool = False,
+    base_function: DiscreteTestProblem,
+    return_tensor: bool = False,
 ) -> Union[List[Dict[int, float]], Tensor]:
     categorical_features = base_function.categorical_features
     discrete_indices = torch.cat(
@@ -737,10 +738,14 @@ def generate_discrete_options(
         dtype=torch.long,
     )
     # normalize to unit cube
-    discrete_options = normalize(discrete_options, base_function.bounds[:, discrete_indices].cpu())
+    discrete_options = normalize(
+        discrete_options, base_function.bounds[:, discrete_indices].cpu()
+    )
     if len(base_function.categorical_features) > 0:
         # unnormalize categoricals
-        cat_indices = base_function.categorical_indices-len(base_function.cont_indices) # shift by number of continuous indices
+        cat_indices = base_function.categorical_indices.cpu() - len(
+            base_function.cont_indices
+        )  # shift by number of continuous indices
         discrete_options[..., cat_indices] = unnormalize(
             discrete_options[..., cat_indices],
             base_function.categorical_bounds.cpu(),

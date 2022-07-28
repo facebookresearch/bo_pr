@@ -405,7 +405,8 @@ def run_one_replication(
                 # construct a list of dictionaries mapping indices in one-hot space
                 # to parameter values.
                 discrete_options = generate_discrete_options(
-                    base_function=base_function, return_tensor=base_function.cont_indices.shape[0]==0,
+                    base_function=base_function,
+                    return_tensor=base_function.cont_indices.shape[0] == 0,
                 )
                 if base_function.cont_indices.shape[0] > 0:
                     # optimize mixed
