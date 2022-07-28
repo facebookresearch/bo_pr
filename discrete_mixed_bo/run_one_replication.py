@@ -228,8 +228,8 @@ def run_one_replication(
             is_constrained=is_constrained,
         )
 
-    # setup nevergrad_porfolio
-    if label == "nevergrad_porfolio":
+    # setup nevergrad_portfolio
+    if label == "nevergrad_portfolio":
         params = []
         for i in base_function.cont_indices:
             params.append(
@@ -310,7 +310,7 @@ def run_one_replication(
                 .to(**tkwargs)
             )
             candidates = init_exact_rounding_func(raw_candidates)
-        elif label == "nevergrad_porfolio":
+        elif label == "nevergrad_portfolio":
             X_numeric = ohe_to_numeric(X[-1:])
             if len(base_function.categorical_features) > 0:
                 X_numeric[..., base_function.categorical_indices] = normalize(
