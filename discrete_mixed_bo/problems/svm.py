@@ -87,7 +87,7 @@ class SVMFeatureSelection(DiscreteTestProblem):
         inds_selected = np.where(x[: self.n_features] == 1)[0]
         if inds_selected.shape[0] == 0:
             # if no features, use the mean prediction
-            pred = train_y.mean(axis=0)
+            pred = self.train_y.mean(axis=0)
         else:
             epsilon = 0.01 * 10 ** (2 * x[-3])  # Default = 0.1
             C = 0.01 * 10 ** (4 * x[-2])  # Default = 1.0

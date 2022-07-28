@@ -260,16 +260,19 @@ def run_one_replication(
                     )
                 )
             )
-        optimizer = ng.optimizers.PortfolioDiscreteOnePlusOne(
-            parametrization=ng.p.Instrumentation(*params),
-            budget=iterations + X.shape[0],
-            num_workers=1,
-        )
+        params = ng.p.Instrumentation(*params)
         ohe_to_numeric = OneHotToNumeric(
             categorical_features=base_function.categorical_features,
             transform_on_train=True,
         )
         X_numeric = ohe_to_numeric(X)
+        params.value = (tuple(X_numeric[-1].tolist()),{})
+        optimizer = ng.optimizers.PortfolioDiscreteOnePlusOne(
+            parametrization=params,
+            budget=iterations + X.shape[0],
+            num_workers=1,
+        )
+        optimizer.ask() # clear initial value
         if len(base_function.categorical_features) > 0:
             X_numeric[..., base_function.categorical_indices] = normalize(
                 X_numeric[..., base_function.categorical_indices],
@@ -277,7 +280,6 @@ def run_one_replication(
             )
         X_numeric = unnormalize(X_numeric, base_function.bounds)
         for xi, yi in zip(X_numeric.cpu().numpy(), Y.cpu().numpy()):
-            print(tuple(xi.tolist()))
             xi = optimizer.parametrization.spawn_child(
                 new_value=(tuple(xi.tolist()), {})
             )
