@@ -54,7 +54,7 @@ class OneHotToNumeric(InputTransform, Module):
                 end_idx = start_idx + categorical_features[i]
                 self.categorical_ends.append(end_idx)
                 start_idx = end_idx
-        self.numeric_dim = min(self.categorical_starts) + len(categorical_features)
+            self.numeric_dim = min(self.categorical_starts) + len(categorical_features)
         self.use_ste = use_ste
         self.categorical_features = categorical_features
 
@@ -67,15 +67,17 @@ class OneHotToNumeric(InputTransform, Module):
         Returns:
             A `batch_shape x n x d`-dim tensor of rounded inputs.
         """
-        X_numeric = X[..., : self.numeric_dim].clone()
-        idx = self.categorical_starts[0]
-        for start, end in zip(self.categorical_starts, self.categorical_ends):
-            if self.use_ste:
-                X_numeric[..., idx] = OneHotToNumericSTE.apply(X[..., start:end])
-            else:
-                X_numeric[..., idx] = X[..., start:end].argmax(dim=-1)
-            idx += 1
-        return X_numeric
+        if self.categorical_features is not None:
+            X_numeric = X[..., : self.numeric_dim].clone()
+            idx = self.categorical_starts[0]
+            for start, end in zip(self.categorical_starts, self.categorical_ends):
+                if self.use_ste:
+                    X_numeric[..., idx] = OneHotToNumericSTE.apply(X[..., start:end])
+                else:
+                    X_numeric[..., idx] = X[..., start:end].argmax(dim=-1)
+                idx += 1
+            return X_numeric
+        return X
 
     def untransform(self, X: Tensor) -> Tensor:
         r"""Un-transform the inputs to a model.
