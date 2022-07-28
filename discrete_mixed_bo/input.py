@@ -44,7 +44,7 @@ class OneHotToNumeric(InputTransform, Module):
         self.transform_on_fantasize = transform_on_fantasize
         self.categorical_starts = []
         self.categorical_ends = []
-        self.categorical_features = None if ((categorical_features is None) or (len(categorical_features) > 0)) else categorical_features
+        self.categorical_features = None if ((categorical_features is None) or (len(categorical_features) == 0)) else categorical_features
 
         if self.categorical_features is not None:
             start_idx = None
