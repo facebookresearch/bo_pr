@@ -737,7 +737,7 @@ def generate_discrete_options(
         dtype=torch.long,
     )
     # normalize to unit cube
-    discrete_options = normalize(discrete_options, base_function.bounds.cpu())
+    discrete_options = normalize(discrete_options, base_function.bounds[:, discrete_indices].cpu())
     if len(base_function.categorical_features) > 0:
         # unnormalize categoricals
         discrete_options[..., base_function.categorical_indices] = unnormalize(
