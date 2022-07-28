@@ -736,6 +736,14 @@ def generate_discrete_options(
         list(product(*[range(c) for c in cardinalities])),
         dtype=torch.long,
     )
+    # normalize to unit cube
+    discrete_options = normalize(discrete_options, base_function.bounds.cpu())
+    if len(base_function.categorical_features) > 0:
+        # unnormalize categoricals
+        discrete_options[..., base_function.categorical_indices] = unnormalize(
+            discrete_options[..., base_function.categorical_indices],
+            base_function.categorical_bounds.cpu(),
+        )
     indices = base_function.integer_indices.tolist()
     # now one-hot encode the categoricals
     if categorical_features is not None:
