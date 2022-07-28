@@ -266,6 +266,12 @@ def run_one_replication(
             transform_on_train=True,
         )
         X_numeric = ohe_to_numeric(X)
+        if len(base_function.categorical_features) > 0:
+            X_numeric[..., base_function.categorical_indices] = normalize(
+                X_numeric[..., base_function.categorical_indices],
+                base_function.categorical_bounds,
+            )
+        X_numeric = unnormalize(X_numeric, base_function.bounds)
         params.value = (tuple(X_numeric[-1].tolist()),{})
         optimizer = ng.optimizers.PortfolioDiscreteOnePlusOne(
             parametrization=params,
@@ -273,17 +279,11 @@ def run_one_replication(
             num_workers=1,
         )
         optimizer.ask() # clear initial value
-        if len(base_function.categorical_features) > 0:
-            X_numeric[..., base_function.categorical_indices] = normalize(
-                X_numeric[..., base_function.categorical_indices],
-                base_function.categorical_bounds,
-            )
-        X_numeric = unnormalize(X_numeric, base_function.bounds)
         for xi, yi in zip(X_numeric.cpu().numpy(), Y.cpu().numpy()):
             xi = optimizer.parametrization.spawn_child(
                 new_value=(tuple(xi.tolist()), {})
             )
-            optimizer.tell(xi, yi.item())
+            optimizer.tell(xi, -yi.item())
 
     # BO loop for as many iterations as needed.
     for i in range(existing_iterations, iterations):
@@ -323,7 +323,7 @@ def run_one_replication(
             xi = optimizer.parametrization.spawn_child(
                 new_value=(tuple(X_numeric.view(-1).tolist()), {})
             )
-            optimizer.tell(xi, Y[-1].item())
+            optimizer.tell(xi, -Y[-1].item())
             candidates_numeric = torch.tensor(
                 optimizer.ask().value[0], dtype=X.dtype, device=X.device
             ).view(1, -1)
