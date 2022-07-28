@@ -740,8 +740,9 @@ def generate_discrete_options(
     discrete_options = normalize(discrete_options, base_function.bounds[:, discrete_indices].cpu())
     if len(base_function.categorical_features) > 0:
         # unnormalize categoricals
-        discrete_options[..., base_function.categorical_indices] = unnormalize(
-            discrete_options[..., base_function.categorical_indices],
+        cat_indices = base_function.categorical_indices-len(base_function.cont_indices) # shift by number of continuous indices
+        discrete_options[..., cat_indices] = unnormalize(
+            discrete_options[..., cat_indices],
             base_function.categorical_bounds.cpu(),
         )
     indices = base_function.integer_indices.tolist()
