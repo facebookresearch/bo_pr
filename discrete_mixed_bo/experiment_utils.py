@@ -716,8 +716,8 @@ def get_problem(name: str, dim: Optional[int] = None, **kwargs) -> DiscreteTestP
 
 
 def generate_discrete_options(
-    base_function: DiscreteTestProblem,
-) -> List[Dict[int, float]]:
+    base_function: DiscreteTestProblem, return_tensor: bool = False,
+) -> Union[List[Dict[int, float]], Tensor]:
     categorical_features = base_function.categorical_features
     discrete_indices = torch.cat(
         [base_function.integer_indices, base_function.categorical_indices], dim=0
@@ -764,4 +764,6 @@ def generate_discrete_options(
             start_idx = end_idx
     # create a list of dictionaries of mapping indices to values
     # the list has a dictionary for each discrete configuration
+    if return_tensor:
+        return discrete_options.to(base_function.bounds)
     return [dict(zip(indices, xi)) for xi in discrete_options.tolist()]
