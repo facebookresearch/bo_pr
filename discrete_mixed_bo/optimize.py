@@ -21,6 +21,7 @@ from botorch.acquisition.acquisition import (
     AcquisitionFunction,
     OneShotAcquisitionFunction,
 )
+from botorch.acquisition.fixed_feature import FixedFeatureAcquisitionFunction
 from botorch.acquisition.knowledge_gradient import qKnowledgeGradient
 from discrete_mixed_bo.gen import gen_candidates_scipy
 from botorch.logging import logger
@@ -505,24 +506,32 @@ def optimize_acqf_mixed(
                 "are currently not supported when `q > 1`. This is needed to "
                 "compute the joint acquisition value."
             )
-
+    all_columns = set(range(bounds.shape[-1]))
     if q == 1:
         ff_candidate_list, ff_acq_value_list = [], []
         for fixed_features in fixed_features_list:
-            candidate, acq_value = optimize_acqf(
+            ff_columns, ff_vals = list(zip(*fixed_features.items()))
+            ff_acq_function = FixedFeatureAcquisitionFunction(
                 acq_function=acq_function,
-                bounds=bounds,
+                d=bounds.shape[-1],
+                columns=list(ff_columns),
+                values=torch.tensor(ff_vals, dtype=bounds.dtype, device=bounds.device),
+            )
+            keep_columns = sorted(list(set(all_columns) - set(ff_columns)))
+            candidate, acq_value = optimize_acqf(
+                acq_function=ff_acq_function,
+                bounds=bounds[:, keep_columns],
                 q=q,
                 num_restarts=num_restarts,
                 raw_samples=raw_samples,
                 options=options or {},
                 inequality_constraints=inequality_constraints,
                 equality_constraints=equality_constraints,
-                fixed_features=fixed_features,
                 post_processing_func=post_processing_func,
                 batch_initial_conditions=batch_initial_conditions,
                 return_best_only=True,
             )
+            candidate = ff_acq_function._construct_X_full(X=candidate)
             ff_candidate_list.append(candidate)
             ff_acq_value_list.append(acq_value)
 

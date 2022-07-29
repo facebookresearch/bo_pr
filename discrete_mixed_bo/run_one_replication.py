@@ -23,8 +23,8 @@ from discrete_mixed_bo.experiment_utils import (
 )
 from discrete_mixed_bo.input import OneHotToNumeric
 from discrete_mixed_bo.model_utils import apply_normal_copula_transform
-from discrete_mixed_bo.optimize import optimize_acqf
-from botorch.optim.optimize import optimize_acqf_discrete, optimize_acqf_mixed
+from discrete_mixed_bo.optimize import optimize_acqf, optimize_acqf_mixed
+from botorch.optim.optimize import optimize_acqf_discrete
 import numpy as np
 from botorch.test_functions.base import (
     ConstrainedBaseTestProblem,
