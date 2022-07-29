@@ -272,13 +272,13 @@ def run_one_replication(
                 base_function.categorical_bounds,
             )
         X_numeric = unnormalize(X_numeric, base_function.bounds)
-        params.value = (tuple(X_numeric[-1].tolist()),{})
+        params.value = (tuple(X_numeric[-1].tolist()), {})
         optimizer = ng.optimizers.PortfolioDiscreteOnePlusOne(
             parametrization=params,
             budget=iterations + X.shape[0],
             num_workers=1,
         )
-        optimizer.ask() # clear initial value
+        optimizer.ask()  # clear initial value
         for xi, yi in zip(X_numeric.cpu().numpy(), Y.cpu().numpy()):
             xi = optimizer.parametrization.spawn_child(
                 new_value=(tuple(xi.tolist()), {})
