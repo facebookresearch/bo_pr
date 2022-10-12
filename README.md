@@ -10,7 +10,7 @@ Please cite our work if you find it useful.
     @inproceedings{daulton2022pr,
           title={Bayesian Optimization over Discrete and Mixed Spaces via Probabilistic Reparameterization}, 
           author={Samuel Daulton and Xingchen Wan and and David Eriksson and Maximilian Balandat and Michael A. Osborne and Eytan Bakshy},
-          booktitle={ICML Workshop on Adaptive Experimental Design and Active Learning in the Real World},
+          booktitle={Advances in Neural Information Processing Systems 35},
           year={2022}
     }
 
