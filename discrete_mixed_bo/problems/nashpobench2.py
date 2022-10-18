@@ -5,21 +5,20 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from botorch.test_functions.base import MultiObjectiveTestProblem
-from discrete_mixed_bo.problems.base import DiscreteTestProblem
-import torch
-import numpy as np
-
-
-from itertools import product
 import logging
-from logging import Logger
 import os
+import pickle
 import random
 import sys
-from typing import Union, Optional
+from itertools import product
+from logging import Logger
+from typing import Optional, Union
 
-import pickle
+import numpy as np
+import torch
+from botorch.test_functions.base import MultiObjectiveTestProblem
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 class NASHPOBench2API:

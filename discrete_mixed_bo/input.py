@@ -4,24 +4,27 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Callable, Dict, List, Optional
-from torch.nn import Module
-from torch import nn
-from torch.distributions import Categorical
-from botorch.models.transforms.input import InputTransform
-from botorch.utils.transforms import normalize_indices
-from botorch.utils.sampling import draw_sobol_samples, sample_simplex
-import torch
-from discrete_mixed_bo.ste import RoundSTE, OneHotToNumericSTE, OneHotArgmaxSTE
-from gpytorch.constraints import GreaterThan, Interval
-from gpytorch.priors import NormalPrior
-from torch import Tensor
-from torch.nn.functional import one_hot
-from dataclasses import dataclass
 from abc import abstractmethod
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional
 
-from botorch.utils.sampling import draw_sobol_normal_samples
+import torch
+from botorch.models.transforms.input import InputTransform
+from botorch.utils.sampling import (
+    draw_sobol_normal_samples,
+    draw_sobol_samples,
+    sample_simplex,
+)
+from botorch.utils.transforms import normalize_indices
+from gpytorch.constraints import GreaterThan, Interval
 from gpytorch.module import Module as GPyTorchModule
+from gpytorch.priors import NormalPrior
+from torch import Tensor, nn
+from torch.distributions import Categorical
+from torch.nn import Module
+from torch.nn.functional import one_hot
+
+from discrete_mixed_bo.ste import OneHotArgmaxSTE, OneHotToNumericSTE, RoundSTE
 
 
 class OneHotToNumeric(InputTransform, Module):
@@ -379,6 +382,31 @@ class AnalyticProbabilisticReparameterizationInputTransform(InputTransform, Modu
             )
         self.register_buffer("all_discrete_options", all_discrete_options)
 
+    def get_rounding_prob(self, X: Tensor) -> Tensor:
+        # todo consolidate this the MCProbabilisticReparameterizationInputTransform
+        X_prob = X.detach().clone()
+        if self.integer_indices is not None:
+            # compute probabilities for integers
+            X_int = X_prob[..., self.integer_indices]
+            X_int_abs = X_int.abs()
+            offset = X_int_abs.floor()
+            if self.tau is not None:
+                X_prob[..., self.integer_indices] = torch.sigmoid(
+                    (X_int_abs - offset - 0.5) / self.tau
+                )
+            else:
+                X_prob[..., self.integer_indices] = X_int_abs - offset
+        # compute probabilities for categoricals
+        for start, end in zip(self.categorical_starts, self.categorical_ends):
+            X_categ = X_prob[..., start:end]
+            if self.tau is not None:
+                X_prob[..., start:end] = torch.softmax(
+                    (X_categ - 0.5) / self.tau, dim=-1
+                )
+            else:
+                X_prob[..., start:end] = X_categ / X_categ.sum(dim=-1)
+        return X_prob[..., self.discrete_indices]
+
     def get_probs(self, X: Tensor) -> Tensor:
         """
         Args:
@@ -505,6 +533,7 @@ class MCProbabilisticReparameterizationInputTransform(InputTransform, Module):
     def __init__(
         self,
         integer_indices: Optional[List[int]] = None,
+        integer_bounds: Optional[Tensor] = None,
         categorical_features: Optional[Dict[int, int]] = None,
         transform_on_train: bool = False,
         transform_on_eval: bool = True,
@@ -572,6 +601,10 @@ class MCProbabilisticReparameterizationInputTransform(InputTransform, Module):
         self.register_buffer(
             "categorical_ends", torch.tensor(categorical_ends, dtype=torch.long)
         )
+        if integer_indices is None:
+            self.register_buffer("integer_bounds", torch.tensor([], dtype=torch.long))
+        else:
+            self.register_buffer("integer_bounds", integer_bounds)
         self.mc_samples = mc_samples
         self.resample = resample
         self.flip = flip
@@ -584,13 +617,21 @@ class MCProbabilisticReparameterizationInputTransform(InputTransform, Module):
             X_int = X_prob[..., self.integer_indices]
             X_int_abs = X_int.abs()
             offset = X_int_abs.floor()
-            X_prob[..., self.integer_indices] = torch.sigmoid(
-                (X_int_abs - offset - 0.5) / self.tau
-            )
+            if self.tau is not None:
+                X_prob[..., self.integer_indices] = torch.sigmoid(
+                    (X_int_abs - offset - 0.5) / self.tau
+                )
+            else:
+                X_prob[..., self.integer_indices] = X_int_abs - offset
         # compute probabilities for categoricals
         for start, end in zip(self.categorical_starts, self.categorical_ends):
             X_categ = X_prob[..., start:end]
-            X_prob[..., start:end] = torch.softmax((X_categ - 0.5) / self.tau, dim=-1)
+            if self.tau is not None:
+                X_prob[..., start:end] = torch.softmax(
+                    (X_categ - 0.5) / self.tau, dim=-1
+                )
+            else:
+                X_prob[..., start:end] = X_categ / X_categ.sum(dim=-1)
         return X_prob[..., self.discrete_indices]
 
     def transform(self, X: Tensor) -> Tensor:
@@ -645,7 +686,10 @@ class MCProbabilisticReparameterizationInputTransform(InputTransform, Module):
                 )
             X_abs_rounded = offset + rounding_component
             X_int_new = (-1) ** is_negative.to(offset) * X_abs_rounded
-            X_expanded[..., self.integer_indices] = X_int_new
+            # clamp to bounds
+            X_expanded[..., self.integer_indices] = torch.minimum(
+                torch.maximum(X_int_new, self.integer_bounds[0]), self.integer_bounds[1]
+            )
 
         # sample for categoricals
         if self.categorical_features is not None and len(self.categorical_features) > 0:

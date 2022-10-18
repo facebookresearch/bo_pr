@@ -11,9 +11,9 @@ A wrapper classes around AquisitionFunctions to modify inputs and outputs.
 from __future__ import annotations
 
 from botorch.acquisition.acquisition import AcquisitionFunction
+from botorch.models.model import Model
 from torch import Tensor
 from torch.nn import Module
-from botorch.models.model import Model
 
 
 class AcquisitionFunctionWrapper(AcquisitionFunction):

@@ -19,17 +19,19 @@ https://github.com/aryandeshwal/HyBO/blob/master/experiments/test_functions/mixe
 
 # import cocoex
 
+from typing import Optional
+
 # prepare mixed integer suite
 # suite_name = "bbob-mixint"
 # output_folder = "cocex-optimize-fmin"
 # suite = cocoex.Suite(suite_name, "", "")
 import numpy as np
 import torch
-from discrete_mixed_bo.problems.base import DiscreteTestProblem
-from typing import Optional
-from torch import Tensor
 from botorch.test_functions.synthetic import SyntheticTestFunction
 from botorch.utils.sampling import manual_seed
+from torch import Tensor
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 class BBOBTestFunction(SyntheticTestFunction):

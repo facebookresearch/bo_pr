@@ -7,17 +7,14 @@
 """
 Problems with only binary variables.
 """
-import numpy as np
-from torch import Tensor
-import torch
-from typing import Optional
-from discrete_mixed_bo.problems.base import (
-    DiscreteTestProblem,
-)
-
-import torch
-import numpy as np
 from collections import OrderedDict
+from typing import Optional
+
+import numpy as np
+import torch
+from torch import Tensor
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 def _pest_spread(curr_pest_frac, spread_rate, control_rate, apply_control):

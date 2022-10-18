@@ -5,12 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
+from typing import Dict, List, Optional
+
+import torch
 from botorch.test_functions.base import BaseTestProblem, MultiObjectiveTestProblem
 from botorch.utils.transforms import normalize, unnormalize
-from typing import Dict, List, Optional
 from torch import Tensor
 from torch.nn import Module
-import torch
 
 
 class DiscreteTestProblem(BaseTestProblem):

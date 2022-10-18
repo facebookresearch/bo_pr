@@ -22,17 +22,16 @@ import torch
 from botorch.acquisition import AcquisitionFunction
 from botorch.generation.utils import _remove_fixed_features_from_optimization
 from botorch.optim.parameter_constraints import (
+    NLC_TOL,
     _arrayify,
     make_scipy_bounds,
     make_scipy_linear_constraints,
     make_scipy_nonlinear_inequality_constraints,
-    NLC_TOL,
 )
 from botorch.optim.stopping import ExpMAStoppingCriterion
 from botorch.optim.utils import _filter_kwargs, columnwise_clamp, fix_features
 from scipy.optimize import minimize
 from torch import Tensor
-from torch.optim import Optimizer
 
 
 def gen_candidates_scipy(
@@ -267,53 +266,11 @@ def gen_candidates_torch(
     acquisition_function: AcquisitionFunction,
     lower_bounds: Optional[Union[float, Tensor]] = None,
     upper_bounds: Optional[Union[float, Tensor]] = None,
-    optimizer: Type[Optimizer] = torch.optim.Adam,
     options: Optional[Dict[str, Union[float, str]]] = None,
     callback: Optional[Callable[[int, Tensor, Tensor], NoReturn]] = None,
     fixed_features: Optional[Dict[int, Optional[float]]] = None,
+    optimizer=torch.optim.Adam,
 ) -> Tuple[Tensor, Tensor]:
-    r"""Generate a set of candidates using a `torch.optim` optimizer.
-
-    Optimizes an acquisition function starting from a set of initial candidates
-    using an optimizer from `torch.optim`.
-
-    Args:
-        initial_conditions: Starting points for optimization.
-        acquisition_function: Acquisition function to be used.
-        lower_bounds: Minimum values for each column of initial_conditions.
-        upper_bounds: Maximum values for each column of initial_conditions.
-        optimizer (Optimizer): The pytorch optimizer to use to perform
-            candidate search.
-        options: Options used to control the optimization. Includes
-            maxiter: Maximum number of iterations
-        callback: A callback function accepting the current iteration, loss,
-            and gradients as arguments. This function is executed after computing
-            the loss and gradients, but before calling the optimizer.
-        fixed_features: This is a dictionary of feature indices to values, where
-            all generated candidates will have features fixed to these values.
-            If the dictionary value is None, then that feature will just be
-            fixed to the clamped value and not optimized. Assumes values to be
-            compatible with lower_bounds and upper_bounds!
-
-    Returns:
-        2-element tuple containing
-
-        - The set of generated candidates.
-        - The acquisition value for each t-batch.
-
-    Example:
-        >>> qEI = qExpectedImprovement(model, best_f=0.2)
-        >>> bounds = torch.tensor([[0., 0.], [1., 2.]])
-        >>> Xinit = gen_batch_initial_conditions(
-        >>>     qEI, bounds, q=3, num_restarts=25, raw_samples=500
-        >>> )
-        >>> batch_candidates, batch_acq_values = gen_candidates_torch(
-                initial_conditions=Xinit,
-                acquisition_function=qEI,
-                lower_bounds=bounds[0],
-                upper_bounds=bounds[1],
-            )
-    """
     options = options or {}
 
     # if there are fixed features we may optimize over a domain of lower dimension
@@ -346,13 +303,20 @@ def gen_candidates_torch(
 
     _clamp = partial(columnwise_clamp, lower=lower_bounds, upper=upper_bounds)
     clamped_candidates = _clamp(initial_conditions).requires_grad_(True)
-    _optimizer = optimizer(params=[clamped_candidates], lr=options.get("lr", 0.025))
+    lr = options.get("lr", 0.025)
+    _optimizer = optimizer(params=[clamped_candidates], lr=lr)
 
     i = 0
     stop = False
+    if options.get("rel_tol") is None:
+        # turn off exponential stopping
+        options["rel_tol"] = float("-inf")
     stopping_criterion = ExpMAStoppingCriterion(
         **_filter_kwargs(ExpMAStoppingCriterion, **options)
     )
+    decay = options.get("decay", False)
+    if callback is None:
+        callback = options.get("callback")
     while not stop:
         i += 1
         with torch.no_grad():
@@ -360,7 +324,7 @@ def gen_candidates_torch(
         loss = -acquisition_function(X).sum()
         grad = torch.autograd.grad(loss, X)[0]
         if callback:
-            callback(i, loss, grad)
+            callback(i, loss, grad, X)
 
         def assign_grad():
             _optimizer.zero_grad()
@@ -368,8 +332,10 @@ def gen_candidates_torch(
             return loss
 
         _optimizer.step(assign_grad)
+        if decay:
+            _optimizer = optimizer(params=[clamped_candidates], lr=lr / i**0.7)
         stop = stopping_criterion.evaluate(fvals=loss.detach())
-
+    clamped_candidates = clamped_candidates.detach()
     clamped_candidates = _clamp(clamped_candidates)
     with torch.no_grad():
         batch_acquisition = acquisition_function(clamped_candidates)

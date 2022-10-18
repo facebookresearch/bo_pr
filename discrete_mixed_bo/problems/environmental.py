@@ -8,10 +8,11 @@
 Environmental model calibration problem from:
 https://github.com/aryandeshwal/HyBO/blob/master/experiments/test_functions/em_func.py
 """
+from typing import Optional
+
 import numpy as np
 import torch
 from torch import Tensor
-from typing import Optional
 
 from discrete_mixed_bo.problems.base import DiscreteTestProblem
 

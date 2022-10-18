@@ -12,14 +12,15 @@ References
 .. [Wang2020]
     B. Wang, J. Cai, C. Liu, J. Yang, X. Ding. Harnessing a Novel Machine-Learning-Assisted Evolutionary Algorithm to Co-optimize Three Characteristics of an Electrospun Oil Sorbent. ACS Applied Materials & Interfaces, 2020.
 """
-import numpy as np
-import torch
-from torch import Tensor
 from typing import List, Optional
 
-from discrete_mixed_bo.problems.base import DiscreteTestProblem
+import numpy as np
+import torch
 from botorch.test_functions.base import MultiObjectiveTestProblem
 from botorch.utils.torch import BufferDict
+from torch import Tensor
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 class OilSorbent(DiscreteTestProblem, MultiObjectiveTestProblem):

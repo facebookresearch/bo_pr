@@ -4,15 +4,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from discrete_mixed_bo.problems.base import DiscreteTestProblem
-import xgboost
-from typing import Dict, Optional
-import numpy as np
-from sklearn import model_selection, metrics, datasets
-import torch
 import os
+from math import exp, log
+from typing import Dict, Optional
+
+import numpy as np
 import pandas as pd
-from math import log, exp
+import torch
+import xgboost
+from sklearn import datasets, metrics, model_selection
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 class XGBoostHyperparameter(DiscreteTestProblem):

@@ -4,14 +4,16 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from sklearn.svm import SVR
-import numpy as np
-from discrete_mixed_bo.problems.base import DiscreteTestProblem
-import torch
-from torch import Tensor
-from typing import Optional, Tuple
-from xgboost import XGBRegressor
 import math
+from typing import Optional, Tuple
+
+import numpy as np
+import torch
+from sklearn.svm import SVR
+from torch import Tensor
+from xgboost import XGBRegressor
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 def process_uci_data(

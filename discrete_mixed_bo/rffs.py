@@ -15,9 +15,9 @@ from botorch.models.deterministic import DeterministicModel, GenericDeterministi
 from botorch.models.model import Model
 from botorch.utils.gp_sampling import (
     RandomFourierFeatures,
-    get_weights_posterior,
     get_deterministic_model,
     get_deterministic_model_multi_samples,
+    get_weights_posterior,
 )
 
 

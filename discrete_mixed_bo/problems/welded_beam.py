@@ -7,17 +7,16 @@
 """
 Welded Beam problem from https://link.springer.com/content/pdf/10.1007/s00158-018-2182-1.pdf
 """
-import numpy as np
-from torch import Tensor
-import torch
+from copy import deepcopy
 from math import sqrt
 from typing import Optional, Tuple
-from discrete_mixed_bo.problems.base import (
-    DiscreteTestProblem,
-)
-from copy import deepcopy
 
+import numpy as np
+import torch
 from botorch.test_functions.base import ConstrainedBaseTestProblem
+from torch import Tensor
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 class WeldedBeam(DiscreteTestProblem, ConstrainedBaseTestProblem):

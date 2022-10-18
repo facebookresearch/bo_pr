@@ -23,14 +23,15 @@ from botorch.acquisition.acquisition import (
 )
 from botorch.acquisition.fixed_feature import FixedFeatureAcquisitionFunction
 from botorch.acquisition.knowledge_gradient import qKnowledgeGradient
-from discrete_mixed_bo.gen import gen_candidates_scipy
 from botorch.logging import logger
+from botorch.optim.stopping import ExpMAStoppingCriterion
+from torch import Tensor
+
+from discrete_mixed_bo.gen import gen_candidates_scipy, gen_candidates_torch
 from discrete_mixed_bo.initializers import (
     gen_batch_initial_conditions,
     gen_one_shot_kg_initial_conditions,
 )
-from botorch.optim.stopping import ExpMAStoppingCriterion
-from torch import Tensor
 
 INIT_OPTION_KEYS = {
     # set of options for initialization that we should
@@ -66,6 +67,7 @@ def optimize_acqf(
     batch_initial_conditions: Optional[Tensor] = None,
     return_best_only: bool = True,
     sequential: bool = False,
+    stochastic: bool = False,
     **kwargs: Any,
 ) -> Tuple[Tensor, Tensor]:
     r"""Generate a set of candidates via multi-start optimization.
@@ -162,6 +164,7 @@ def optimize_acqf(
                 batch_initial_conditions=None,
                 return_best_only=True,
                 sequential=False,
+                stochastic=stochastic,
             )
             candidate_list.append(candidate)
             acq_value_list.append(acq_value)
@@ -224,18 +227,28 @@ def optimize_acqf(
     batch_candidates_list: List[Tensor] = []
     batch_acq_values_list: List[Tensor] = []
     batched_ics = batch_initial_conditions.split(batch_limit)
+    gen_kwargs = {}
+    if stochastic:
+        gen_candidates = gen_candidates_torch
+    else:
+        gen_candidates = gen_candidates_scipy
+        gen_kwargs.update(
+            {
+                "inequality_constraints": inequality_constraints,
+                "equality_constraints": equality_constraints,
+                "nonlinear_inequality_constraints": nonlinear_inequality_constraints,
+            }
+        )
     for i, batched_ics_ in enumerate(batched_ics):
         # optimize using random restart optimization
-        batch_candidates_curr, batch_acq_values_curr = gen_candidates_scipy(
+        batch_candidates_curr, batch_acq_values_curr = gen_candidates(
             initial_conditions=batched_ics_,
             acquisition_function=acq_function,
             lower_bounds=bounds[0],
             upper_bounds=bounds[1],
             options={k: v for k, v in options.items() if k not in INIT_OPTION_KEYS},
-            inequality_constraints=inequality_constraints,
-            equality_constraints=equality_constraints,
-            nonlinear_inequality_constraints=nonlinear_inequality_constraints,
             fixed_features=fixed_features,
+            **gen_kwargs,
         )
         batch_candidates_list.append(batch_candidates_curr)
         batch_acq_values_list.append(batch_acq_values_curr)

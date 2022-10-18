@@ -7,15 +7,15 @@
 """
 Problems with only binary variables.
 """
-import numpy as np
-from torch import Tensor
-import torch
 from math import pi
 from typing import Optional, Tuple
-from discrete_mixed_bo.problems.base import (
-    DiscreteTestProblem,
-)
+
+import numpy as np
+import torch
 from botorch.test_functions.base import ConstrainedBaseTestProblem
+from torch import Tensor
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 class PressureVessel(DiscreteTestProblem, ConstrainedBaseTestProblem):

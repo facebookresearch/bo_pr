@@ -11,22 +11,21 @@ Code from: https://github.com/Ryandry1st/CCO-in-ORAN/tree/main/cco_standalone_ic
 Paper: R. M. Dreifuerst, et al. Optimizing Coverage and Capacity in Cellular Networks using Machine Learning. IEEE ICASSP special session on Machine Learning in Networks, 2021.
 """
 import os
+from typing import Any, Dict, Optional
+
+import numpy as np
+import torch
+from botorch.test_functions.base import MultiObjectiveTestProblem
+from torch import Tensor
+
 from discrete_mixed_bo.problems.base import DiscreteTestProblem
-from discrete_mixed_bo.problems.cco.simulated_rsrp import SimulatedRSRP
 from discrete_mixed_bo.problems.cco.problem_formulation import (
     CCORasterBlanketFormulation,
 )
-from botorch.test_functions.base import MultiObjectiveTestProblem
-from typing import Any, Optional, Dict
-import numpy as np
-from torch import Tensor
-import torch
+from discrete_mixed_bo.problems.cco.simulated_rsrp import SimulatedRSRP
 
 
 class CCO(DiscreteTestProblem, MultiObjectiveTestProblem):
-    _bounds = [(0.0, 5.0) for _ in range(15)] + [  # downtilts (integers)
-        (30.0, 50.0) for _ in range(15)  # transmission power (floats)
-    ]
     dim: int = 30
     _ref_point = [0.35, 0.35]
 
@@ -36,6 +35,7 @@ class CCO(DiscreteTestProblem, MultiObjectiveTestProblem):
         noise_std: Optional[float] = None,
         negate: bool = False,
         scalarize: bool = False,
+        n_int_values: int = 6,
     ) -> None:
         """
         This method requires a `data` object that is constructed as follows:
@@ -47,6 +47,14 @@ class CCO(DiscreteTestProblem, MultiObjectiveTestProblem):
         The npz files can be retrieved from:
         https://github.com/Ryandry1st/CCO-in-ORAN/tree/main/cco_standalone_icassp_2021/data/power_maps
         """
+        if n_int_values not in (6, 11):
+            raise ValueError("Only 6 and 11 int values are supported")
+        self._n_int_values = n_int_values
+        self._bounds = [
+            (0.0, n_int_values - 1) for _ in range(15)
+        ] + [  # downtilts (integers)
+            (30.0, 50.0) for _ in range(15)  # transmission power (floats)
+        ]
         MultiObjectiveTestProblem.__init__(
             self,
             negate=negate,
@@ -97,7 +105,8 @@ class CCO(DiscreteTestProblem, MultiObjectiveTestProblem):
 
     def evaluate_true(self, X: Tensor) -> Tensor:
         X = X.clone()
-        X[..., :15] *= 2
+        if self._n_int_values == 6:
+            X[..., :15] *= 2
         Y = (
             torch.stack(
                 [

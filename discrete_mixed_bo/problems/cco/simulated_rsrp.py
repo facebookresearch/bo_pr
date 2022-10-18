@@ -15,7 +15,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-
 # System Constants
 MIN_INTERFERENCE_POWER_WATT = 1e-24
 

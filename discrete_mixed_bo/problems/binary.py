@@ -7,13 +7,14 @@
 """
 Problems with only binary variables.
 """
-import numpy as np
-from torch import Tensor
-import torch
 from typing import Optional
-from discrete_mixed_bo.problems.base import (
-    DiscreteTestProblem,
-)
+
+import numpy as np
+import torch
+from torch import Tensor
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
+
 
 # Code for the contamination problem is adapted from:
 # https://github.com/QUVA-Lab/COMBO/blob/master/COMBO/experiments/test_functions/binary_categorical.py.

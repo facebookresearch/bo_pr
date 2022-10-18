@@ -5,13 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 
 from typing import Dict, List, Optional
-from gpytorch.constraints import Interval, GreaterThan
-from gpytorch.kernels import Kernel, MaternKernel, RBFKernel, ScaleKernel
-from gpytorch.priors.torch_priors import GammaPrior, LogNormalPrior
-from botorch.models.kernels import CategoricalKernel
-from torch import Tensor
+
 import numpy as np
 import torch
+from botorch.models.kernels import CategoricalKernel
+from gpytorch.constraints import GreaterThan, Interval
+from gpytorch.kernels import Kernel, MaternKernel, RBFKernel, ScaleKernel
+from gpytorch.priors.torch_priors import GammaPrior, LogNormalPrior
+from torch import Tensor
 
 
 def get_kernel(

@@ -9,9 +9,9 @@ Straight Through Estimators.
 """
 
 import torch
-from torch.nn import Module
 from torch import Tensor
 from torch.autograd import Function
+from torch.nn import Module
 from torch.nn.functional import one_hot
 
 

@@ -7,8 +7,9 @@ r"""
 Trust Region Utilities.
 """
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
+
 import torch
 
 

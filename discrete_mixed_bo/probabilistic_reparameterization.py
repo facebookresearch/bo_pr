@@ -9,25 +9,28 @@ Probabilistic Reparameterization (with gradients) using Monte Carlo estimators.
 """
 
 from abc import ABC, abstractmethod
-import torch
-from contextlib import ExitStack
 from collections import OrderedDict
-from torch.nn import Module
-from torch import Tensor
-from torch.autograd import Function
+from contextlib import ExitStack
+from typing import Dict, List, Optional
+
+import torch
 from botorch.acquisition.acquisition import AcquisitionFunction
 from botorch.models.transforms.input import (
     ChainedInputTransform,
     InputTransform,
     Normalize,
 )
-from discrete_mixed_bo.wrapper import AcquisitionFunctionWrapper
-from typing import Dict, List, Optional
+from torch import Tensor
+from torch.autograd import Function
+from torch.nn import Module
+from torch.nn.functional import one_hot
+
 from discrete_mixed_bo.input import (
     AnalyticProbabilisticReparameterizationInputTransform,
     MCProbabilisticReparameterizationInputTransform,
     OneHotToNumeric,
 )
+from discrete_mixed_bo.wrapper import AcquisitionFunctionWrapper
 
 
 def get_probabilistic_reparameterization_input_transform(
@@ -70,6 +73,7 @@ def get_probabilistic_reparameterization_input_transform(
     else:
         tfs["round"] = MCProbabilisticReparameterizationInputTransform(
             integer_indices=integer_indices,
+            integer_bounds=integer_bounds,
             categorical_features=categorical_features,
             resample=resample,
             mc_samples=mc_samples,
@@ -133,11 +137,18 @@ class AbstractProbabilisticReparameterization(AcquisitionFunctionWrapper, ABC):
                     integer_indices, dtype=torch.long, device=integer_bounds.device
                 ),
             )
+            self.register_buffer("integer_bounds", integer_bounds)
             discrete_indices.extend(integer_indices)
         else:
             self.register_buffer(
                 "integer_indices",
                 torch.tensor([], dtype=torch.long, device=integer_bounds.device),
+            )
+            self.register_buffer(
+                "integer_bounds",
+                torch.tensor(
+                    [], dtype=integer_bounds.dtype, device=integer_bounds.device
+                ),
             )
         if categorical_features is not None and len(categorical_features) > 0:
             categorical_indices = list(range(min(categorical_features.keys()), dim))
@@ -170,6 +181,56 @@ class AbstractProbabilisticReparameterization(AcquisitionFunctionWrapper, ABC):
             ),
         )
         self.model = acq_function.model  # for sample_around_best heuristic
+        # moving average baseline
+        self.register_buffer(
+            "ma_counter",
+            torch.zeros(1, dtype=torch.double, device=integer_bounds.device),
+        )
+        self.register_buffer(
+            "ma_hidden",
+            torch.zeros(1, dtype=torch.double, device=integer_bounds.device),
+        )
+        self.register_buffer(
+            "ma_baseline",
+            torch.zeros(1, dtype=torch.double, device=integer_bounds.device),
+        )
+
+    def sample_candidates(self, X: Tensor) -> Tensor:
+        if "unnormalize" in self.input_transform:
+            unnormalized_X = self.input_transform["unnormalize"](X)
+        else:
+            unnormalized_X = X.clone()
+        prob = self.input_transform["round"].get_rounding_prob(X=unnormalized_X)
+        discrete_idx = 0
+        for i in self.integer_indices:
+            p = prob[..., discrete_idx]
+            rounding_component = torch.distributions.Bernoulli(probs=p).sample()
+            unnormalized_X[..., i] = unnormalized_X[..., i].floor() + rounding_component
+            discrete_idx += 1
+        unnormalized_X[..., self.integer_indices] = torch.minimum(
+            torch.maximum(
+                unnormalized_X[..., self.integer_indices], self.integer_bounds[0]
+            ),
+            self.integer_bounds[1],
+        )
+        # this is the starting index for the categoricals in unnormalized_X
+        raw_idx = self.cont_indices.shape[0] + discrete_idx
+        if self.categorical_indices.shape[0] > 0:
+            for i, cardinality in self.categorical_features.items():
+                discrete_end = discrete_idx + cardinality
+                p = prob[..., discrete_idx:discrete_end]
+                z = one_hot(
+                    torch.distributions.Categorical(probs=p).sample(),
+                    num_classes=cardinality,
+                )
+                raw_end = raw_idx + cardinality
+                unnormalized_X[..., raw_idx:raw_end] = z
+                discrete_idx = discrete_end
+                raw_idx = raw_end
+        # normalize X
+        if "normalize" in self.input_transform:
+            return self.input_transform["normalize"](unnormalized_X)
+        return unnormalized_X
 
     @abstractmethod
     def forward(self, X: Tensor) -> Tensor:
@@ -330,6 +391,8 @@ class MCProbabilisticReparameterization(AbstractProbabilisticReparameterization)
             self.categorical_indices,
             self.grad_estimator,
             self.one_hot_to_numeric,
+            self.ma_counter,
+            self.ma_hidden,
         )
 
 
@@ -349,6 +412,8 @@ class _MCProbabilisticReparameterization(Function):
         categorical_indices: Tensor,
         grad_estimator: str,
         one_hot_to_numeric: Optional[OneHotToNumeric],
+        ma_counter: Optional[Tensor],
+        ma_hidden: Optional[Tensor],
     ):
         """Evaluate the expectation of the acquisition function under
         probabilistic reparameterization. Compute this in chunks of size
@@ -381,6 +446,8 @@ class _MCProbabilisticReparameterization(Function):
             ctx.discrete_indices = input_tf["round"].discrete_indices
             ctx.cont_indices = cont_indices
             ctx.categorical_indices = categorical_indices
+            ctx.ma_counter = ma_counter
+            ctx.ma_hidden = ma_hidden
             tilde_x_samples = input_tf(input.unsqueeze(-3))
             # save the rounding component
 
@@ -429,47 +496,57 @@ class _MCProbabilisticReparameterization(Function):
                 dim=-1
             )  # average over samples from proposal distribution
             ctx.acq_values = acq_values
-            if grad_estimator in ("arm", "u2g"):
-                if input_tf["round"].categorical_starts.shape[0] > 0:
-                    raise NotImplementedError
-                # use the same base samples in input_tf_flip
-                if (
-                    not hasattr(input_tf_flip, "base_samples")
-                    or input_tf_flip.base_samples.shape[-2] != input.shape[-2]
-                ):
-                    input_tf_flip["round"].base_samples = (
-                        input_tf["round"].base_samples.detach().clone()
-                    )
+            # update moving average baseline
+            ctx.ma_hidden = ma_hidden.clone()
+            ctx.ma_counter = ctx.ma_counter.clone()
+            # update in place
+            decay = 0.7
+            ma_counter.add_(1)
+            ma_hidden.sub_((ma_hidden - acq_values.detach().mean()) * (1 - decay))
+            if ctx.needs_input_grad[0]:
+                if grad_estimator in ("arm", "u2g"):
+                    if input_tf["round"].categorical_starts.shape[0] > 0:
+                        raise NotImplementedError
+                    # use the same base samples in input_tf_flip
+                    if (
+                        not hasattr(input_tf_flip, "base_samples")
+                        or input_tf_flip.base_samples.shape[-2] != input.shape[-2]
+                    ):
+                        input_tf_flip["round"].base_samples = (
+                            input_tf["round"].base_samples.detach().clone()
+                        )
 
-                ctx.base_samples = input_tf_flip["round"].base_samples.detach()
-                with torch.no_grad():
-                    tilde_x_samples_flip = input_tf_flip(input.unsqueeze(-3))
-                    # save the rounding component
-                    ctx.rounding_component_flip = (
-                        tilde_x_samples_flip[..., integer_indices]
-                        - input[..., integer_indices].unsqueeze(-3)
-                        > 0
-                    ).to(tilde_x_samples_flip)
-                    # compute the acquisition function where inputs are rounded according to base_samples > 1-prob
-                    # This is used for the ARM/U2G gradient estimators
-                    if one_hot_to_numeric is not None:
-                        tilde_x_samples_flip = one_hot_to_numeric(tilde_x_samples_flip)
-                    acq_values_flip_list = []
-                    start_idx = 0
-                    while start_idx < tilde_x_samples_flip.shape[-3]:
-                        end_idx = min(
-                            start_idx + batch_limit, tilde_x_samples_flip.shape[-3]
-                        )
-                        acq_values_flip = acq_function(
-                            tilde_x_samples_flip[..., start_idx:end_idx, :, :]
-                        )
-                        acq_values_flip_list.append(acq_values_flip)
-                        start_idx += batch_limit
-                    acq_values_flip = torch.cat(acq_values_flip_list, dim=-1)
-                    ctx.mean_acq_values_flip = acq_values_flip.mean(
-                        dim=-1
-                    )  # average over samples from proposal distribution
-                    ctx.acq_values_flip = acq_values_flip
+                    ctx.base_samples = input_tf_flip["round"].base_samples.detach()
+                    with torch.no_grad():
+                        tilde_x_samples_flip = input_tf_flip(input.unsqueeze(-3))
+                        # save the rounding component
+                        ctx.rounding_component_flip = (
+                            tilde_x_samples_flip[..., integer_indices]
+                            - input[..., integer_indices].unsqueeze(-3)
+                            > 0
+                        ).to(tilde_x_samples_flip)
+                        # compute the acquisition function where inputs are rounded according to base_samples > 1-prob
+                        # This is used for the ARM/U2G gradient estimators
+                        if one_hot_to_numeric is not None:
+                            tilde_x_samples_flip = one_hot_to_numeric(
+                                tilde_x_samples_flip
+                            )
+                        acq_values_flip_list = []
+                        start_idx = 0
+                        while start_idx < tilde_x_samples_flip.shape[-3]:
+                            end_idx = min(
+                                start_idx + batch_limit, tilde_x_samples_flip.shape[-3]
+                            )
+                            acq_values_flip = acq_function(
+                                tilde_x_samples_flip[..., start_idx:end_idx, :, :]
+                            )
+                            acq_values_flip_list.append(acq_values_flip)
+                            start_idx += batch_limit
+                        acq_values_flip = torch.cat(acq_values_flip_list, dim=-1)
+                        ctx.mean_acq_values_flip = acq_values_flip.mean(
+                            dim=-1
+                        )  # average over samples from proposal distribution
+                        ctx.acq_values_flip = acq_values_flip
             return ctx.mean_acq_values.detach()
 
     @staticmethod
@@ -520,6 +597,17 @@ class _MCProbabilisticReparameterization(Function):
                     )
             elif ctx.grad_estimator == "reinforce":
                 sample_level = expanded_acq_values * (rounding_component - prob)
+            elif ctx.grad_estimator == "reinforce_ma":
+                # use reinforce with the moving average baseline
+                if ctx.ma_counter == 0:
+                    baseline = 0.0
+                else:
+                    decay = 0.7
+                    baseline = ctx.ma_hidden / (1.0 - torch.pow(decay, ctx.ma_counter))
+                sample_level = (expanded_acq_values - baseline) * (
+                    rounding_component - prob
+                )
+
             grads = (sample_level / ctx.tau).mean(dim=-3)
 
             new_grads = (
@@ -543,5 +631,18 @@ class _MCProbabilisticReparameterization(Function):
                 )[0]
                 # overwrite grad_output since the previous step already applied the chain rule
                 new_grads[..., cont_indices] = auto_grad
-            return new_grads, None, None, None, None, None, None, None, None, None
-        return None, None, None, None, None, None, None, None, None, None
+            return (
+                new_grads,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+        return None, None, None, None, None, None, None, None, None, None, None, None

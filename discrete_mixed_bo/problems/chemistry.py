@@ -5,15 +5,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-import numpy as np
-from discrete_mixed_bo.problems.base import DiscreteTestProblem
-import torch
-from torch import Tensor
 from typing import Any, Dict, Optional, Tuple
+
+import gpytorch.settings as gpt_settings
+import numpy as np
+import torch
 from botorch.models.gp_regression_mixed import MixedSingleTaskGP
 from botorch.models.transforms.outcome import Standardize
-from gpytorch.likelihoods.gaussian_likelihood import FixedNoiseGaussianLikelihood
 from botorch.utils.transforms import normalize
+from gpytorch.likelihoods.gaussian_likelihood import FixedNoiseGaussianLikelihood
+from torch import Tensor
+
+from discrete_mixed_bo.problems.base import DiscreteTestProblem
 
 
 class Chemistry(DiscreteTestProblem):
@@ -40,13 +43,19 @@ class Chemistry(DiscreteTestProblem):
         X_norm = normalize(data["X"], bounds=self._model_bounds)
         Y = data["Y"]
         train_Yvar = torch.full_like(Y, 1e-10) * Y.std().pow(2)
-        self.model = MixedSingleTaskGP(
-            train_X=X_norm,
-            train_Y=Y,
-            cat_dims=list(range(3)),
-            outcome_transform=Standardize(m=1),
-            likelihood=FixedNoiseGaussianLikelihood(noise=train_Yvar.squeeze(-1)),
-        )
+        # override the default min fixed noise level
+        # this requires https://github.com/cornellius-gp/gpytorch/pull/2132
+        lb = float("-inf")
+        with gpt_settings.min_fixed_noise(
+            float_value=lb, double_value=lb, half_value=lb
+        ):
+            self.model = MixedSingleTaskGP(
+                train_X=X_norm,
+                train_Y=Y,
+                cat_dims=list(range(3)),
+                outcome_transform=Standardize(m=1),
+                likelihood=FixedNoiseGaussianLikelihood(noise=train_Yvar.squeeze(-1)),
+            )
         self.model.load_state_dict(data["state_dict"])
 
     def evaluate_true(self, X: Tensor) -> Tensor:

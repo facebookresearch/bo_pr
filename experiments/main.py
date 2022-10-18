@@ -7,13 +7,15 @@
 r"""
 The main script for running a single replication.
 """
+import errno
+import json
 import os
 import sys
-from discrete_mixed_bo.run_one_replication import run_one_replication
-import json
-import torch
-import errno
 from typing import Any, Dict
+
+import torch
+
+from discrete_mixed_bo.run_one_replication import run_one_replication
 
 
 def fetch_data(kwargs: Dict[str, Any]) -> None:

@@ -6,80 +6,76 @@
 
 """Utilities for running experiments."""
 from collections import OrderedDict
-from botorch.models.transforms.input import Normalize, ChainedInputTransform
+from copy import deepcopy
+from itertools import product
+from math import log
+from typing import Callable, Dict, List, Optional, Tuple, Union
+
+import torch
+from botorch.acquisition.acquisition import AcquisitionFunction
 from botorch.acquisition.analytic import (
     ConstrainedExpectedImprovement,
     ExpectedImprovement,
     PosteriorMean,
     UpperConfidenceBound,
 )
-from botorch.acquisition.objective import ScalarizedPosteriorTransform
-from botorch.test_functions.base import (
-    ConstrainedBaseTestProblem,
-)
 from botorch.acquisition.multi_objective.analytic import ExpectedHypervolumeImprovement
 from botorch.acquisition.multi_objective.monte_carlo import (
     qExpectedHypervolumeImprovement,
 )
-from botorch.acquisition.acquisition import AcquisitionFunction
-from gpytorch.mlls import SumMarginalLogLikelihood
-from gpytorch.likelihoods import GaussianLikelihood
-from gpytorch.priors import GammaPrior
-from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikelihood
-from botorch.utils.sampling import (
-    draw_sobol_samples,
-)
-from torch.nn.functional import one_hot
-from itertools import product
-from copy import deepcopy
-from scipy.stats.mstats import winsorize as scipy_winsorize
-from math import log
-import torch
-from botorch.models import FixedNoiseGP, SingleTaskGP, ModelListGP
+from botorch.acquisition.objective import ScalarizedPosteriorTransform
+from botorch.models import FixedNoiseGP, ModelListGP, SingleTaskGP
 from botorch.models.gpytorch import GPyTorchModel
 from botorch.models.model import Model
+from botorch.models.transforms.input import ChainedInputTransform, Normalize
 from botorch.models.transforms.outcome import Standardize
-from botorch.utils.transforms import normalize, unnormalize
+from botorch.test_functions.base import ConstrainedBaseTestProblem
+from botorch.test_functions.multi_objective import DTLZ2
+from botorch.test_functions.synthetic import Ackley, Hartmann, Rosenbrock
 from botorch.utils.multi_objective.box_decompositions.non_dominated import (
     FastNondominatedPartitioning,
 )
-from discrete_mixed_bo.problems.base import (
-    DiscretizedBotorchTestProblem,
-    DiscreteTestProblem,
-)
+from botorch.utils.sampling import draw_sobol_samples
+from botorch.utils.transforms import normalize, unnormalize
+from gpytorch.constraints import GreaterThan, Interval
+from gpytorch.likelihoods import GaussianLikelihood
+from gpytorch.mlls import SumMarginalLogLikelihood
+from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikelihood
+from gpytorch.priors import GammaPrior
+from scipy.stats.mstats import winsorize as scipy_winsorize
+from statsmodels.distributions.empirical_distribution import ECDF
+from torch import Tensor
+from torch.nn.functional import one_hot
+
 from discrete_mixed_bo.input import (
     LatentCategoricalEmbedding,
     LatentCategoricalSpec,
-    Round,
     OneHotToNumeric,
+    Round,
 )
+from discrete_mixed_bo.kernels import get_kernel
 from discrete_mixed_bo.model_utils import apply_normal_copula_transform
-from discrete_mixed_bo.problems.binary import Contamination, LABS
-from discrete_mixed_bo.problems.chemistry import Chemistry
-from discrete_mixed_bo.problems.environmental import Environmental
-from discrete_mixed_bo.problems.nashpobench2 import NASHPOBenchII
-from discrete_mixed_bo.problems.re_problems import PressureVessel
-from discrete_mixed_bo.problems.welded_beam import WeldedBeam
-from discrete_mixed_bo.problems.svm import SVMFeatureSelection
-from discrete_mixed_bo.problems.xgboost_hp import XGBoostHyperparameter
-from discrete_mixed_bo.problems.pest import PestControl
-from discrete_mixed_bo.problems.cco.cco import CCO
-from discrete_mixed_bo.problems.oil_sorbent import OilSorbent, OilSorbentMixed
-from discrete_mixed_bo.rffs import get_gp_sample_w_transforms
 from discrete_mixed_bo.probabilistic_reparameterization import (
     AnalyticProbabilisticReparameterization,
     MCProbabilisticReparameterization,
 )
-from gpytorch.constraints import GreaterThan, Interval
-from gpytorch.likelihoods import GaussianLikelihood
-from botorch.test_functions.synthetic import Ackley, Hartmann, Rosenbrock
-from torch import Tensor
-from typing import Callable, Dict, List, Optional, Tuple, Union
-from discrete_mixed_bo.kernels import get_kernel
-from botorch.test_functions.multi_objective import DTLZ2
-
+from discrete_mixed_bo.problems.base import (
+    DiscreteTestProblem,
+    DiscretizedBotorchTestProblem,
+)
+from discrete_mixed_bo.problems.binary import LABS, Contamination
+from discrete_mixed_bo.problems.cco.cco import CCO
+from discrete_mixed_bo.problems.chemistry import Chemistry
 from discrete_mixed_bo.problems.coco_mixed_integer import Sphere
-from statsmodels.distributions.empirical_distribution import ECDF
+from discrete_mixed_bo.problems.environmental import Environmental
+from discrete_mixed_bo.problems.nashpobench2 import NASHPOBenchII
+from discrete_mixed_bo.problems.oil_sorbent import OilSorbent, OilSorbentMixed
+from discrete_mixed_bo.problems.pest import PestControl
+from discrete_mixed_bo.problems.re_problems import PressureVessel
+from discrete_mixed_bo.problems.svm import SVMFeatureSelection
+from discrete_mixed_bo.problems.welded_beam import WeldedBeam
+from discrete_mixed_bo.problems.xgboost_hp import XGBoostHyperparameter
+from discrete_mixed_bo.rffs import get_gp_sample_w_transforms
 
 
 def eval_problem(X: Tensor, base_function: DiscreteTestProblem) -> Tensor:
@@ -324,7 +320,6 @@ def initialize_model(
             {
                 "train_X": train_x,
                 "train_Y": train_y[..., i : i + 1],
-                "outcome_transform": None if copula else Standardize(m=1),
                 "covar_module": get_kernel(
                     kernel_type=kernel_type,
                     dim=transformed_x.shape[-1],
@@ -360,6 +355,7 @@ def get_EI(
     model: Model,
     train_Y: Tensor,
     num_constraints: int,
+    standardize_tf: Standardize,
     posterior_transform: Optional[ScalarizedPosteriorTransform] = None,
 ) -> ExpectedImprovement:
     if posterior_transform is not None:
@@ -367,19 +363,30 @@ def get_EI(
     else:
         obj = train_Y[..., 0]
     if num_constraints > 0:
-        feas = (train_Y[..., 1:] >= 0).all(dim=-1)
+        constraints = {}
+        slacks = torch.zeros(
+            num_constraints, dtype=train_Y.dtype, device=train_Y.device
+        )
+        for i in range(1, num_constraints + 1):
+            slack = (
+                (0.0 - standardize_tf.means[0, i]) / standardize_tf.stdvs[0, i]
+            ).item()
+            slacks[i - 1] = slack
+            constraints[i] = (slack, None)
+        feas = (train_Y[..., 1:] >= slacks).all(dim=-1)
         if feas.any():
             best_f = obj[feas].max()
         else:
             # take worst point
-            best_f = -obj.max()
+            best_f = obj.min()
         if posterior_transform is not None:
             raise NotImplementedError
+
         return ConstrainedExpectedImprovement(
             model=model,
             best_f=best_f,
             objective_index=0,
-            constraints={i: (0.0, None) for i in range(1, num_constraints + 1)},
+            constraints=constraints,
         )
     return ExpectedImprovement(
         model, best_f=obj.max(), posterior_transform=posterior_transform
@@ -419,10 +426,13 @@ def get_acqf(
     num_constraints: int,
     base_function: DiscreteTestProblem,
     exact_rounding_func: ChainedInputTransform,
+    standardize_tf: Standardize,
     batch_size: int = 1,
     **kwargs,
 ) -> Union[AcquisitionFunction, List[AcquisitionFunction]]:
     r"""Combines a few of the above utils to construct the acqf."""
+    if base_function.is_moo:
+        ref_point = standardize_tf(base_function.ref_point.unsqueeze(0))[0].squeeze(0)
     is_constrained = isinstance(base_function, ConstrainedBaseTestProblem)
     if is_constrained and label[-2:] != "ei":
         raise NotImplementedError("Only EI is currently supported with constraints.")
@@ -459,6 +469,7 @@ def get_acqf(
                 train_Y=train_Y,
                 num_constraints=num_constraints,
                 posterior_transform=posterior_transform,
+                standardize_tf=standardize_tf,
             )
 
         elif label[-3:] == "ucb":
@@ -485,13 +496,13 @@ def get_acqf(
                 acq_func = get_qEHVI(
                     model=model,
                     train_Y=preds,
-                    ref_point=base_function.ref_point,
+                    ref_point=ref_point,
                 )
         elif label[-4:] == "ehvi":
             acq_func = get_EHVI(
                 model=model,
                 train_Y=train_Y,
-                ref_point=base_function.ref_point,
+                ref_point=ref_point,
             )
         else:
             raise NotImplementedError
@@ -519,6 +530,7 @@ def get_acqf(
                 mc_samples=kwargs.get("pr_mc_samples", 1024),
                 apply_numeric=kwargs.get("apply_numeric", False),
                 tau=kwargs.get("pr_tau", 0.1),
+                grad_estimator=kwargs.get("pr_grad_estimator", "reinforce"),
             )
     return acq_func
 
@@ -620,6 +632,7 @@ def get_problem(name: str, dim: Optional[int] = None, **kwargs) -> DiscreteTestP
             data=kwargs.get("data"),
             negate=True,
             scalarize=kwargs.get("scalarize", False),
+            n_int_values=kwargs.get("n_int_values", 6),
         )
 
     elif name == "discrete_dtlz2":
