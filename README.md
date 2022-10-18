@@ -2,7 +2,7 @@
 
 # Bayesian Optimization over Discrete and Mixed Spaces via Probabilistic Reparameterization
 
-This is the code associated with the paper "[Bayesian Optimization over Discrete and Mixed Spaces via Probabilistic Reparameterization](https://realworldml.github.io/files/cr/paper22.pdf)."
+This is the code associated with the paper "[Bayesian Optimization over Discrete and Mixed Spaces via Probabilistic Reparameterization](https://github.com/facebookresearch/bo_pr/blob/main/BO_Probabilistic_Reparameterization.pdf)."
 
 Please cite our work if you find it useful.
 
